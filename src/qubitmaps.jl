@@ -11,7 +11,7 @@ function jordanwigner(H::OpSum; atol=1e-20)
   Hf = _is_electronic(H) ? electron_to_fermion(H) : H
   Hq = OpSum()
   for k in 1:length(Hf)
-    if ITensors.name.(ITensors.terms(Hf[k])) == ["Id"]
+    if ITensors.name.(ITensors.terms(Hf[k]))::Vector{String} == ["Id"]
       Hq += ITensors.coefficient(Hf[k]), "Id", 1
     else
       jwops = jordanwigner(Hf[k])
@@ -30,30 +30,16 @@ function jordanwigner(H::OpSum; atol=1e-20)
   return prunedHq
 end
 
-function jordanwigner(F::Scaled{C,Prod{Op}}) where {C}
+function helperfunc(F, oplist::Vector{Tuple{Pauli, Pauli}}, ::Val{N}) where N
+  Qop = Tuple[]
   Fcoeff = ITensors.coefficient(F)
-  Fops = ITensors.terms(F)
-  Fnames = ITensors.name.(Fops)
-  Fsites = first.(ITensors.sites.(Fops))
+  Fops::Vector{ITensors.Ops.Op} = ITensors.terms(F)
+  Fnames::Vector{String} = ITensors.name.(Fops)
+  Fsites::Vector{Int} = first.(ITensors.sites.(Fops)::Vector{Tuple{Int64}})
 
-  # return identity MPOTerm
-  Fops == ["Id"] && return 1.0 * Prod{Op}() * ("I", 1)
-
-  oplist = []
-  coefflist = []
-  for k in 1:length(Fops)
-    Fsite = Fsites[k]
-    Fname = Fnames[k]
-
-    β = im / 2 * (-1)^Int(Fname[end] == '†')
-    X = pauli(1 / 2, "Z"^(Fsite - 1) * "X")
-    Y = pauli(β, "Z"^(Fsite - 1) * "Y")
-    oplist = vcat(oplist, (X, Y))
-  end
-  Qop = []
   energy_offset = 0.0
-  for p in Iterators.product(oplist...)
-    P = reduce(*, p)
+  for p::NTuple{N, ITensorChemistry.Pauli} in Iterators.product(oplist...)
+    P::Pauli = reduce(*, p)
     coeff = (-1)^length(Fops) * Fcoeff * coefficient(P)
     O = string.(operator(P))
     paulilocs = findall(x -> x ≠ 'I', collect(O))
@@ -65,8 +51,46 @@ function jordanwigner(F::Scaled{C,Prod{Op}}) where {C}
       energy_offset += coeff
     end
   end
+  Qop, energy_offset = helperfunc(F, oplist, Val(length(oplist)))
   energy_offset ≠ 0.0 && return vcat(Qop, [(energy_offset, "Id", 1)])
+  return Qop
+end
 
+function jordanwigner(F::Scaled{C,Prod{Op}}) where {C}
+  Fcoeff = ITensors.coefficient(F)
+  Fops::Vector{ITensors.Ops.Op} = ITensors.terms(F)
+  Fnames::Vector{String} = ITensors.name.(Fops)
+  Fsites::Vector{Int} = first.(ITensors.sites.(Fops)::Vector{Tuple{Int64}})
+
+  # return identity MPOTerm
+  Fops == ["Id"] && return 1.0 * Prod{Op}() * ("I", 1)
+
+  oplist = Tuple{Pauli, Pauli}[]
+  for k in 1:length(Fops)
+    Fsite = Fsites[k]
+    Fname = Fnames[k]
+
+    β = im / 2 * (-1)^Int(Fname[end] == '†')
+    X = pauli(1 / 2, "Z"^(Fsite - 1) * "X")
+    Y = pauli(β, "Z"^(Fsite - 1) * "Y")
+    oplist = vcat(oplist, (X, Y))
+  end
+  #=energy_offset = 0.0
+  for p::NTuple{length(oplist), ITensorChemistry.Pauli} in Iterators.product(oplist...)
+    P::Pauli = reduce(*, p)
+    coeff = (-1)^length(Fops) * Fcoeff * coefficient(P)
+    O = string.(operator(P))
+    paulilocs = findall(x -> x ≠ 'I', collect(O))
+    if !isempty(paulilocs)
+      Qop = vcat(
+        Qop, (coeff, Tuple(vcat([[string(O[loc]), loc] for loc in paulilocs]...))...)
+      )
+    else
+      energy_offset += coeff
+    end
+  end
+  =#
+  Qop = helperfunc(F, oplist, Val(length(oplist)))
   return Qop
 end
 
