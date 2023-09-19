@@ -12,11 +12,13 @@ function jordanwigner(H::OpSum; atol=1e-20)
   Hq = OpSum()
   for k in 1:length(Hf)
     if ITensors.name.(ITensors.terms(Hf[k]))::Vector{String} == ["Id"]
-      Hq += ITensors.coefficient(Hf[k]), "Id", 1
+      #Hq += ITensors.coefficient(Hf[k]), "Id", 1
+      add!(Hq, (ITensors.coefficient(Hf[k]), "Id", 1))
     else
       jwops = jordanwigner(Hf[k])
       for j in 1:length(jwops)
-        Hq += jwops[j]
+        # Hq += jwops[j]
+        add!(Hq, jwops[j])
       end
     end
   end
@@ -24,14 +26,16 @@ function jordanwigner(H::OpSum; atol=1e-20)
   prunedHq = OpSum()
   for k in 1:length(Hq)
     if norm(ITensors.coefficient(Hq[k])) > atol
-      prunedHq += Hq[k]
+      #prunedHq += Hq[k]
+      add!(prunedHq, Hq[k])
     end
   end
   return prunedHq
 end
 
 function helperfunc(F, oplist::Vector{Tuple{Pauli, Pauli}}, ::Val{N}) where N
-  Qop = Tuple[]
+  #Qop = Tuple[]
+  Qop = OpSum()
   Fcoeff = ITensors.coefficient(F)
   Fops::Vector{ITensors.Ops.Op} = ITensors.terms(F)
   Fnames::Vector{String} = ITensors.name.(Fops)
@@ -44,15 +48,20 @@ function helperfunc(F, oplist::Vector{Tuple{Pauli, Pauli}}, ::Val{N}) where N
     O = string.(operator(P))
     paulilocs = findall(x -> x ≠ 'I', collect(O))
     if !isempty(paulilocs)
+      #=
       Qop = vcat(
         Qop, (coeff, Tuple(vcat([[string(O[loc]), loc] for loc in paulilocs]...))...)
       )
+      =#
+      add!(Qop , (coeff, Tuple(vcat([[string(O[loc]), loc] for loc in paulilocs]...))...))
     else
       energy_offset += coeff
     end
   end
-  Qop, energy_offset = helperfunc(F, oplist, Val(length(oplist)))
-  energy_offset ≠ 0.0 && return vcat(Qop, [(energy_offset, "Id", 1)])
+  if energy_offset ≠ 0.0
+   #return vcat(Qop, [(energy_offset, "Id", 1)])
+    add!(Qop, (energy_offset, "Id", 1))
+  end
   return Qop
 end
 

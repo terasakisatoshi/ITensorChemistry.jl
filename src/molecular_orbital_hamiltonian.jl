@@ -110,7 +110,7 @@ function electron_to_fermion(hamiltonian::OpSum)
     O = ITensors.name.(ITensors.terms(h))
 
     if O == ["Id"]
-      fermion_hamiltonian += c, "Id", 1
+      add!(fermion_hamiltonian, (c, "Id", 1))
     else
       ops_and_sites = []
       # loop over each single-site operator
@@ -119,7 +119,7 @@ function electron_to_fermion(hamiltonian::OpSum)
         fermionsite = 2 * sites[j] + Int(o[end] == '↓') - 1
         ops_and_sites = vcat(ops_and_sites, (String(strip(o, o[end])), fermionsite)...)
       end
-      fermion_hamiltonian += (c, ops_and_sites...)
+      add!(fermion_hamiltonian, (c, ops_and_sites...))
     end
   end
   return fermion_hamiltonian
